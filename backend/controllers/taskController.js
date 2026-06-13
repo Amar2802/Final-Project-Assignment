@@ -5,17 +5,24 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-// @desc    Get all tasks with filtering, sorting and search
+// @desc    Get all tasks with filtering, sorting and search (User Isolated)
 // @route   GET /api/tasks
 exports.getTasks = asyncHandler(async (req, res) => {
   const { search, status, priority, category, sortBy } = req.query;
-  const query = {};
+  
+  // Enforce task ownership isolation
+  const query = { user: req.user.id };
 
   // Text search (matches title or description case-insensitively)
   if (search) {
-    query.$or = [
-      { title: { $regex: search, $options: "i" } },
-      { description: { $regex: search, $options: "i" } }
+    query.$and = [
+      { user: req.user.id },
+      {
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } }
+        ]
+      }
     ];
   }
 
@@ -51,7 +58,7 @@ exports.getTasks = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Create a new task
+// @desc    Create a new task (User Isolated)
 // @route   POST /api/tasks
 exports.createTask = asyncHandler(async (req, res) => {
   const { title, description, status, priority, category, dueDate, estimatedHours, actualHours, subtasks } = req.body;
@@ -83,6 +90,7 @@ exports.createTask = asyncHandler(async (req, res) => {
   }
 
   const newTask = await Task.create({
+    user: req.user.id, // Associate task with current user
     title: title.trim(),
     description: description ? description.trim() : "",
     status: status || "Pending",
@@ -101,7 +109,7 @@ exports.createTask = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Update a task
+// @desc    Update a task (User Isolated)
 // @route   PUT /api/tasks/:id
 exports.updateTask = asyncHandler(async (req, res) => {
   const { title, status, priority, estimatedHours, actualHours, subtasks } = req.body;
@@ -138,6 +146,12 @@ exports.updateTask = asyncHandler(async (req, res) => {
     throw new Error(`Task with ID ${req.params.id} not found`);
   }
 
+  // Authorize task ownership
+  if (task.user.toString() !== req.user.id) {
+    res.status(401);
+    throw new Error("Not authorized, this task belongs to another user account");
+  }
+
   // Audit and generate activity logs based on changes
   const newLogs = [];
 
@@ -163,7 +177,6 @@ exports.updateTask = asyncHandler(async (req, res) => {
   }
 
   if (subtasks) {
-    // Check for new subtasks, or status changes in existing subtasks
     const oldSubMap = new Map();
     task.subtasks.forEach(s => {
       oldSubMap.set(s._id ? s._id.toString() : s.text, s);
@@ -183,7 +196,6 @@ exports.updateTask = asyncHandler(async (req, res) => {
       }
     });
 
-    // Check for deleted subtasks
     const newSubKeys = new Set(subtasks.map(s => s._id ? s._id.toString() : s.text));
     task.subtasks.forEach(oldSub => {
       const key = oldSub._id ? oldSub._id.toString() : oldSub.text;
@@ -195,7 +207,7 @@ exports.updateTask = asyncHandler(async (req, res) => {
 
   // Update properties on the task document
   Object.keys(req.body).forEach(key => {
-    if (key !== "activities") { // Prevent direct overriding of activities
+    if (key !== "activities" && key !== "user") { // Prevent overriding activities or user relation
       task[key] = req.body[key];
     }
   });
@@ -213,13 +225,19 @@ exports.updateTask = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Delete a task
+// @desc    Delete a task (User Isolated)
 // @route   DELETE /api/tasks/:id
 exports.deleteTask = asyncHandler(async (req, res) => {
   const task = await Task.findById(req.params.id);
   if (!task) {
     res.status(404);
     throw new Error(`Task with ID ${req.params.id} not found`);
+  }
+
+  // Authorize task ownership
+  if (task.user.toString() !== req.user.id) {
+    res.status(401);
+    throw new Error("Not authorized, this task belongs to another user account");
   }
 
   await Task.findByIdAndDelete(req.params.id);

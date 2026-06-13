@@ -3,10 +3,12 @@ import { getTasks, createTask, updateTask, deleteTask } from "./services/api";
 import StatsSection from "./components/StatsSection";
 import TaskCard from "./components/TaskCard";
 import TaskModal from "./components/TaskModal";
+import Auth from "./components/Auth";
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [viewMode, setViewMode] = useState("grid"); // "grid" or "kanban"
+  const [viewMode, setViewMode] = useState("grid");
   const [filters, setFilters] = useState({
     search: "",
     status: "",
@@ -18,12 +20,22 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
 
-  // Fetch tasks from API
+  // Check if user session token exists on load
+  useEffect(() => {
+    const savedToken = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("user");
+    if (savedToken && savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
+  // Fetch tasks from API (Runs only if user is logged in)
   const fetchTasks = async () => {
+    if (!user) return;
     try {
       const queryParams = {};
       if (filters.search) queryParams.search = filters.search;
-      if (filters.status && viewMode === "grid") queryParams.status = filters.status; // Ignore status filter in Kanban
+      if (filters.status && viewMode === "grid") queryParams.status = filters.status;
       if (filters.priority) queryParams.priority = filters.priority;
       if (filters.sortBy) queryParams.sortBy = filters.sortBy;
 
@@ -35,14 +47,18 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to fetch tasks:", err);
+      // Auto logout if session token expires/fails authentication middleware
+      if (err.response?.status === 401) {
+        handleLogout();
+      }
     }
   };
 
-  // Fetch tasks when filters or view mode changes
+  // Fetch tasks when user logs in, changes filters, or toggles view mode
   useEffect(() => {
     fetchTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, filters.priority, filters.sortBy, viewMode]);
+  }, [user, filters.status, filters.priority, filters.sortBy, viewMode]);
 
   // Debounced search trigger
   useEffect(() => {
@@ -53,6 +69,19 @@ export default function App() {
     return () => clearTimeout(delayDebounceFn);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.search]);
+
+  // Handle Authentication Success
+  const handleAuthSuccess = (userData) => {
+    setUser(userData);
+  };
+
+  // Handle Logout
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    setTasks([]);
+  };
 
   // Handle Create or Update task
   const handleSaveTask = async (formData) => {
@@ -68,7 +97,7 @@ export default function App() {
     }
   };
 
-  // Status Checkbox Toggle (Pending -> Completed or Completed -> Pending)
+  // Status Toggle
   const handleToggleStatus = async (task) => {
     const newStatus = task.status === "Completed" ? "Pending" : "Completed";
     try {
@@ -138,6 +167,11 @@ export default function App() {
     return tasks.filter((t) => t.status === statusName);
   };
 
+  // If user is not authenticated, display the Auth Login/Register panel
+  if (!user) {
+    return <Auth onAuthSuccess={handleAuthSuccess} />;
+  }
+
   return (
     <div className="dashboard-container">
       {/* Background Glow effects */}
@@ -152,7 +186,22 @@ export default function App() {
           <h1>TaskFlow</h1>
           <p>Manage your projects in a clean, glassmorphic workspace</p>
         </div>
-        <div style={{ display: "flex", gap: "12px" }}>
+        
+        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+          {/* User profile & Logout */}
+          <div style={{ textAlign: "right", fontSize: "0.85rem", color: "var(--color-text-muted)", marginRight: "4px" }}>
+            <div>Welcome, <strong style={{ color: "white" }}>{user.name}</strong></div>
+          </div>
+
+          <button className="auth-logout-btn" onClick={handleLogout} title="Sign Out of Session">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            Logout
+          </button>
+
           {/* View Mode Toggle Controls */}
           <div className="glass-panel" style={{ display: "flex", padding: "4px", borderRadius: "10px" }}>
             <button
@@ -213,7 +262,6 @@ export default function App() {
         </div>
 
         <div className="filter-selects">
-          {/* Hide Status dropdown if in Kanban view */}
           {viewMode === "grid" && (
             <select
               className="glass-input glass-select"
