@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMoveStatus }) {
+export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewMode, onShiftStatus }) {
   const { title, description, status, priority, category, dueDate, subtasks, estimatedHours, actualHours } = task;
 
   // Overdue check
@@ -38,18 +38,18 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMov
     }
   };
 
-  // Subtask progress calculations
+  // Subtasks calculations
   const totalSubtasks = subtasks ? subtasks.length : 0;
-  const completedSubtasks = subtasks ? subtasks.filter(s => s.isCompleted).length : 0;
-  const subtaskPercent = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  const completedSubtasks = subtasks ? subtasks.filter((s) => s.isCompleted).length : 0;
+  const progressPercent = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
-  // Time budget check
-  const isOverTimeBudget = estimatedHours > 0 && actualHours > estimatedHours;
+  // Time budget calculation
+  const isOverBudget = estimatedHours > 0 && actualHours > estimatedHours;
 
   return (
     <div className={`task-card glass-panel status-${status.toLowerCase().replace(" ", "-")}`}>
       <div>
-        {/* Header containing Title & Priority */}
+        {/* Header: Title & Priority */}
         <div className="task-card-header">
           <h3 className="task-card-title">{title}</h3>
           <span className={`badge ${getPriorityBadgeClass(priority)}`}>
@@ -62,7 +62,38 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMov
           {description || "No description provided."}
         </p>
 
-        {/* Metadata row (Due date, Category, Time Tracking) */}
+        {/* Subtask checklist progress bar */}
+        {totalSubtasks > 0 && (
+          <div className="task-progress-container" title={`${completedSubtasks} of ${totalSubtasks} subtasks completed`}>
+            <div className="task-progress-bar">
+              <div 
+                className="task-progress-fill" 
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+            <span className="task-progress-text">
+              {completedSubtasks}/{totalSubtasks}
+            </span>
+          </div>
+        )}
+
+        {/* Time Tracking Comparison */}
+        {estimatedHours > 0 && (
+          <div 
+            className={`time-tracking-row ${isOverBudget ? "overdue-budget" : ""}`}
+            title={isOverBudget ? "Over estimated budget!" : "Time spent"}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>
+              {actualHours}h / {estimatedHours}h logged {isOverBudget && "(Over Estimate)"}
+            </span>
+          </div>
+        )}
+
+        {/* Metadata row: Due date & Category */}
         <div className="task-meta-row">
           {category && (
             <span className="task-category-tag">
@@ -72,7 +103,7 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMov
           
           {dueDate && (
             <span className={`task-due-date ${isOverdue ? "overdue" : ""}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
                 <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -81,78 +112,61 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMov
               {isOverdue ? `Overdue: ${formatLocalDate(dueDate)}` : `Due: ${formatLocalDate(dueDate)}`}
             </span>
           )}
-
-          {(estimatedHours > 0 || actualHours > 0) && (
-            <span className={`time-tracking ${isOverTimeBudget ? "over-budget" : ""}`} title="Logged hours / Estimated hours">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-              {actualHours} / {estimatedHours || 0} hrs
-            </span>
-          )}
         </div>
-
-        {/* Subtasks checklist Progress Bar */}
-        {totalSubtasks > 0 && (
-          <div className="progress-container">
-            <div className="progress-info">
-              <span>Checklist</span>
-              <span>{completedSubtasks}/{totalSubtasks} ({subtaskPercent}%)</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${subtaskPercent}%` }}></div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Footer containing Status Toggle & Actions */}
+      {/* Footer: Status Actions & Operations */}
       <div className="task-card-footer">
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          {/* Previous status arrow for Kanban view */}
-          {onMoveStatus && status !== "Pending" && (
-            <button 
-              className="btn-icon" 
-              onClick={() => onMoveStatus(task, -1)}
-              title="Move to previous status"
-              style={{ padding: "4px 6px" }}
-            >
-              &larr;
-            </button>
-          )}
-
-          <button 
-            className="task-status-btn"
-            onClick={() => onToggleStatus(task)}
-            title="Toggle status"
-          >
-            <span className={`badge ${getStatusBadgeClass(status)}`}>
-              {status}
-            </span>
-          </button>
-
-          {/* Next status arrow for Kanban view */}
-          {onMoveStatus && status !== "Completed" && (
-            <button 
-              className="btn-icon" 
-              onClick={() => onMoveStatus(task, 1)}
-              title="Move to next status"
-              style={{ padding: "4px 6px" }}
-            >
-              &rarr;
-            </button>
-          )}
-        </div>
+        {/* Toggle status pill, hidden or read-only in Kanban to avoid clutter, but clickable */}
+        <button 
+          className="task-status-btn"
+          onClick={() => onToggleStatus(task)}
+          title="Toggle completion status"
+        >
+          <span className={`badge ${getStatusBadgeClass(status)}`}>
+            {status}
+          </span>
+        </button>
 
         <div className="task-actions">
+          {/* Kanban Shift controls */}
+          {viewMode === "kanban" && (
+            <div className="kanban-transfer-actions" style={{ marginRight: "8px" }}>
+              {status !== "Pending" && (
+                <button
+                  className="btn-icon"
+                  onClick={() => onShiftStatus(task, "back")}
+                  title="Move status back"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                  </svg>
+                </button>
+              )}
+              {status !== "Completed" && (
+                <button
+                  className="btn-icon"
+                  style={{ borderColor: "rgba(168, 85, 247, 0.4)" }}
+                  onClick={() => onShiftStatus(task, "forward")}
+                  title="Move status forward"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Edit Button */}
           <button 
             className="btn-icon" 
             onClick={() => onEdit(task)}
             title="Edit / View Details"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9"></path>
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
             </svg>
@@ -164,9 +178,11 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, onMov
             onClick={() => onDelete(task._id)}
             title="Delete Task"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"></polyline>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
             </svg>
           </button>
         </div>

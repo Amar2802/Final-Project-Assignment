@@ -1,13 +1,26 @@
 const mongoose = require("mongoose");
 
 const subtaskSchema = new mongoose.Schema({
-  text: { type: String, required: true, trim: true },
-  isCompleted: { type: Boolean, default: false }
+  text: {
+    type: String,
+    required: [true, "Subtask description is required"],
+    trim: true
+  },
+  isCompleted: {
+    type: Boolean,
+    default: false
+  }
 });
 
 const activitySchema = new mongoose.Schema({
-  text: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now }
+  text: {
+    type: String,
+    required: true
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 const taskSchema = new mongoose.Schema({
@@ -40,16 +53,24 @@ const taskSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  subtasks: [subtaskSchema],
+  subtasks: {
+    type: [subtaskSchema],
+    default: []
+  },
   estimatedHours: {
     type: Number,
-    default: 0
+    default: 0,
+    min: [0, "Estimated hours cannot be negative"]
   },
   actualHours: {
     type: Number,
-    default: 0
+    default: 0,
+    min: [0, "Actual hours cannot be negative"]
   },
-  activities: [activitySchema],
+  activities: {
+    type: [activitySchema],
+    default: []
+  },
   createdAt: {
     type: Date,
     default: Date.now

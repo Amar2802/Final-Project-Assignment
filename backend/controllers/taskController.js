@@ -31,11 +31,11 @@ exports.getTasks = asyncHandler(async (req, res) => {
 
   // Filter by category
   if (category) {
-    query.category = { $regex: `^${category}$`, $options: "i" }; // Case insensitive category match
+    query.category = { $regex: `^${category}$`, $options: "i" };
   }
 
   // Sorting setup
-  let sortOption = { createdAt: -1 }; // Default: newest first
+  let sortOption = { createdAt: -1 };
   if (sortBy) {
     const parts = sortBy.split(":");
     const field = parts[0];
@@ -54,9 +54,9 @@ exports.getTasks = asyncHandler(async (req, res) => {
 // @desc    Create a new task
 // @route   POST /api/tasks
 exports.createTask = asyncHandler(async (req, res) => {
-  const { title, description, status, priority, category, dueDate, estimatedHours, subtasks } = req.body;
+  const { title, description, status, priority, category, dueDate, estimatedHours, actualHours, subtasks } = req.body;
 
-  // Manual Validation for professional error responses
+  // Validation
   if (!title || title.trim() === "") {
     res.status(400);
     throw new Error("Task title is required");
@@ -72,7 +72,17 @@ exports.createTask = asyncHandler(async (req, res) => {
     throw new Error("Invalid priority level. Must be Low, Medium, or High");
   }
 
-  const newTask = new Task({
+  if (estimatedHours !== undefined && Number(estimatedHours) < 0) {
+    res.status(400);
+    throw new Error("Estimated hours cannot be negative");
+  }
+
+  if (actualHours !== undefined && Number(actualHours) < 0) {
+    res.status(400);
+    throw new Error("Actual hours cannot be negative");
+  }
+
+  const newTask = await Task.create({
     title: title.trim(),
     description: description ? description.trim() : "",
     status: status || "Pending",
@@ -80,12 +90,10 @@ exports.createTask = asyncHandler(async (req, res) => {
     category: category ? category.trim() : "General",
     dueDate: dueDate || null,
     estimatedHours: Number(estimatedHours) || 0,
-    actualHours: 0,
+    actualHours: Number(actualHours) || 0,
     subtasks: subtasks || [],
     activities: [{ text: "Task created" }]
   });
-
-  await newTask.save();
 
   res.status(201).json({
     success: true,
@@ -96,9 +104,9 @@ exports.createTask = asyncHandler(async (req, res) => {
 // @desc    Update a task
 // @route   PUT /api/tasks/:id
 exports.updateTask = asyncHandler(async (req, res) => {
-  const { title, status, priority, actualHours, subtasks } = req.body;
+  const { title, status, priority, estimatedHours, actualHours, subtasks } = req.body;
 
-  // Validation
+  // Validation checks
   if (title !== undefined && title.trim() === "") {
     res.status(400);
     throw new Error("Task title cannot be empty");
@@ -114,64 +122,88 @@ exports.updateTask = asyncHandler(async (req, res) => {
     throw new Error("Invalid priority level. Must be Low, Medium, or High");
   }
 
+  if (estimatedHours !== undefined && Number(estimatedHours) < 0) {
+    res.status(400);
+    throw new Error("Estimated hours cannot be negative");
+  }
+
+  if (actualHours !== undefined && Number(actualHours) < 0) {
+    res.status(400);
+    throw new Error("Actual hours cannot be negative");
+  }
+
   const task = await Task.findById(req.params.id);
   if (!task) {
     res.status(404);
     throw new Error(`Task with ID ${req.params.id} not found`);
   }
 
-  // Dynamic Activity Logging
-  const logs = [];
+  // Audit and generate activity logs based on changes
+  const newLogs = [];
+
   if (status && status !== task.status) {
-    logs.push(`Status updated to: ${status}`);
+    newLogs.push({ text: `Status updated from '${task.status}' to '${status}'` });
   }
+
+  if (priority && priority !== task.priority) {
+    newLogs.push({ text: `Priority changed from '${task.priority}' to '${priority}'` });
+  }
+
+  if (estimatedHours !== undefined && Number(estimatedHours) !== task.estimatedHours) {
+    newLogs.push({ text: `Estimated time updated to ${estimatedHours} hours` });
+  }
+
   if (actualHours !== undefined && Number(actualHours) !== task.actualHours) {
     const diff = Number(actualHours) - task.actualHours;
-    logs.push(`Logged ${diff > 0 ? "+" : ""}${diff.toFixed(1)} hours (Total: ${Number(actualHours)} hrs)`);
-  }
-  if (title && title.trim() !== task.title) {
-    logs.push(`Title changed to: "${title.trim()}"`);
-  }
-  if (subtasks) {
-    const oldSubtasks = task.subtasks || [];
-    const newSubtasks = subtasks || [];
-    
-    if (newSubtasks.length > oldSubtasks.length) {
-      const added = newSubtasks[newSubtasks.length - 1];
-      logs.push(`Added subtask: "${added.text}"`);
-    } else if (newSubtasks.length < oldSubtasks.length) {
-      logs.push(`Removed a subtask`);
+    if (diff > 0) {
+      newLogs.push({ text: `Logged ${diff} hours of work` });
     } else {
-      // Check for checked/unchecked items
-      for (let i = 0; i < newSubtasks.length; i++) {
-        const matchedOld = oldSubtasks.find(
-          (o) => o.text === newSubtasks[i].text || (o._id && newSubtasks[i]._id && o._id.toString() === newSubtasks[i]._id.toString())
-        );
-        if (matchedOld && matchedOld.isCompleted !== newSubtasks[i].isCompleted) {
-          logs.push(`Subtask "${newSubtasks[i].text}" marked ${newSubtasks[i].isCompleted ? "Completed" : "Pending"}`);
-        }
-      }
+      newLogs.push({ text: `Adjusted logged work to ${actualHours} hours` });
     }
   }
 
-  // Append logs to task activities
-  if (logs.length > 0) {
-    if (!task.activities) task.activities = [];
-    logs.forEach((logText) => {
-      task.activities.push({ text: logText });
+  if (subtasks) {
+    // Check for new subtasks, or status changes in existing subtasks
+    const oldSubMap = new Map();
+    task.subtasks.forEach(s => {
+      oldSubMap.set(s._id ? s._id.toString() : s.text, s);
+    });
+
+    subtasks.forEach(newSub => {
+      const key = newSub._id ? newSub._id.toString() : newSub.text;
+      const oldSub = oldSubMap.get(key);
+      if (!oldSub) {
+        newLogs.push({ text: `Added subtask: '${newSub.text}'` });
+      } else if (newSub.isCompleted !== oldSub.isCompleted) {
+        newLogs.push({
+          text: newSub.isCompleted 
+            ? `Completed subtask: '${newSub.text}'` 
+            : `Reopened subtask: '${newSub.text}'`
+        });
+      }
+    });
+
+    // Check for deleted subtasks
+    const newSubKeys = new Set(subtasks.map(s => s._id ? s._id.toString() : s.text));
+    task.subtasks.forEach(oldSub => {
+      const key = oldSub._id ? oldSub._id.toString() : oldSub.text;
+      if (!newSubKeys.has(key)) {
+        newLogs.push({ text: `Deleted subtask: '${oldSub.text}'` });
+      }
     });
   }
 
-  // Update properties if provided in body
-  if (req.body.title !== undefined) task.title = req.body.title.trim();
-  if (req.body.description !== undefined) task.description = req.body.description.trim();
-  if (req.body.status !== undefined) task.status = req.body.status;
-  if (req.body.priority !== undefined) task.priority = req.body.priority;
-  if (req.body.category !== undefined) task.category = req.body.category.trim();
-  if (req.body.dueDate !== undefined) task.dueDate = req.body.dueDate;
-  if (req.body.subtasks !== undefined) task.subtasks = req.body.subtasks;
-  if (req.body.estimatedHours !== undefined) task.estimatedHours = Number(req.body.estimatedHours);
-  if (req.body.actualHours !== undefined) task.actualHours = Number(req.body.actualHours);
+  // Update properties on the task document
+  Object.keys(req.body).forEach(key => {
+    if (key !== "activities") { // Prevent direct overriding of activities
+      task[key] = req.body[key];
+    }
+  });
+
+  // Append new logs to activities
+  if (newLogs.length > 0) {
+    task.activities.push(...newLogs);
+  }
 
   const updatedTask = await task.save();
 

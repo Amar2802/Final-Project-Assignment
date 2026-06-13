@@ -7,7 +7,6 @@ import TaskModal from "./components/TaskModal";
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [viewMode, setViewMode] = useState("grid"); // "grid" or "kanban"
-  
   const [filters, setFilters] = useState({
     search: "",
     status: "",
@@ -24,7 +23,7 @@ export default function App() {
     try {
       const queryParams = {};
       if (filters.search) queryParams.search = filters.search;
-      if (filters.status) queryParams.status = filters.status;
+      if (filters.status && viewMode === "grid") queryParams.status = filters.status; // Ignore status filter in Kanban
       if (filters.priority) queryParams.priority = filters.priority;
       if (filters.sortBy) queryParams.sortBy = filters.sortBy;
 
@@ -39,13 +38,13 @@ export default function App() {
     }
   };
 
-  // Fetch tasks on initial render and when filters (except search or when in Kanban mode) change
+  // Fetch tasks when filters or view mode changes
   useEffect(() => {
     fetchTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, filters.priority, filters.sortBy]);
+  }, [filters.status, filters.priority, filters.sortBy, viewMode]);
 
-  // Debounced search trigger (avoids querying MongoDB on every keystroke)
+  // Debounced search trigger
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       fetchTasks();
@@ -69,37 +68,34 @@ export default function App() {
     }
   };
 
-  // Cyclic Status Toggle (Pending -> In Progress -> Completed -> Pending)
+  // Status Checkbox Toggle (Pending -> Completed or Completed -> Pending)
   const handleToggleStatus = async (task) => {
-    const nextStatusMap = {
-      "Pending": "In Progress",
-      "In Progress": "Completed",
-      "Completed": "Pending"
-    };
-    const nextStatus = nextStatusMap[task.status] || "Pending";
-    
+    const newStatus = task.status === "Completed" ? "Pending" : "Completed";
     try {
-      await updateTask(task._id, { status: nextStatus });
+      await updateTask(task._id, { status: newStatus });
       fetchTasks();
     } catch (err) {
       console.error("Error toggling task status:", err);
     }
   };
 
-  // Shift Status Directional (for Kanban board columns)
-  const handleMoveStatus = async (task, direction) => {
-    const statusOrder = ["Pending", "In Progress", "Completed"];
-    const currentIndex = statusOrder.indexOf(task.status);
-    const nextIndex = currentIndex + direction;
+  // Shift Status between columns (Kanban directional arrows)
+  const handleShiftStatus = async (task, direction) => {
+    const statusFlow = ["Pending", "In Progress", "Completed"];
+    let currentIndex = statusFlow.indexOf(task.status);
     
-    if (nextIndex >= 0 && nextIndex < statusOrder.length) {
-      const nextStatus = statusOrder[nextIndex];
-      try {
-        await updateTask(task._id, { status: nextStatus });
-        fetchTasks();
-      } catch (err) {
-        console.error("Error shifting task column:", err);
-      }
+    if (direction === "forward" && currentIndex < 2) {
+      currentIndex++;
+    } else if (direction === "back" && currentIndex > 0) {
+      currentIndex--;
+    }
+    
+    const nextStatus = statusFlow[currentIndex];
+    try {
+      await updateTask(task._id, { status: nextStatus });
+      fetchTasks();
+    } catch (err) {
+      console.error("Error shifting status:", err);
     }
   };
 
@@ -137,7 +133,7 @@ export default function App() {
     });
   };
 
-  // Group tasks for Kanban columns
+  // Helper to get tasks by status (for Kanban columns)
   const getTasksByStatus = (statusName) => {
     return tasks.filter((t) => t.status === statusName);
   };
@@ -156,33 +152,34 @@ export default function App() {
           <h1>TaskFlow</h1>
           <p>Manage your projects in a clean, glassmorphic workspace</p>
         </div>
-        
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-          {/* View switcher toggle */}
-          <div className="view-switcher">
-            <button 
-              className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+        <div style={{ display: "flex", gap: "12px" }}>
+          {/* View Mode Toggle Controls */}
+          <div className="glass-panel" style={{ display: "flex", padding: "4px", borderRadius: "10px" }}>
+            <button
+              className="btn-secondary"
+              style={{
+                background: viewMode === "grid" ? "rgba(255,255,255,0.08)" : "transparent",
+                borderColor: "transparent",
+                padding: "8px 14px",
+                fontSize: "0.85rem",
+                borderRadius: "8px"
+              }}
               onClick={() => setViewMode("grid")}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              Grid
+              Grid View
             </button>
-            <button 
-              className={`view-btn ${viewMode === "kanban" ? "active" : ""}`}
+            <button
+              className="btn-secondary"
+              style={{
+                background: viewMode === "kanban" ? "rgba(255,255,255,0.08)" : "transparent",
+                borderColor: "transparent",
+                padding: "8px 14px",
+                fontSize: "0.85rem",
+                borderRadius: "8px"
+              }}
               onClick={() => setViewMode("kanban")}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="3" x2="12" y2="21"></line>
-                <line x1="3" y1="3" x2="3" y2="21"></line>
-                <line x1="21" y1="3" x2="21" y2="21"></line>
-                <line x1="3" y1="9" x2="21" y2="9"></line>
-              </svg>
-              Kanban
+              Kanban Board
             </button>
           </div>
 
@@ -216,8 +213,8 @@ export default function App() {
         </div>
 
         <div className="filter-selects">
-          {/* Hide Status dropdown filter when in Kanban board since columns sort them natively */}
-          {viewMode !== "kanban" && (
+          {/* Hide Status dropdown if in Kanban view */}
+          {viewMode === "grid" && (
             <select
               className="glass-input glass-select"
               value={filters.status}
@@ -252,7 +249,7 @@ export default function App() {
             <option value="dueDate:desc">Due Date (Desc)</option>
           </select>
 
-          {(filters.search || (filters.status && viewMode !== "kanban") || filters.priority || filters.sortBy !== "createdAt:desc") && (
+          {(filters.search || (filters.status && viewMode === "grid") || filters.priority || filters.sortBy !== "createdAt:desc") && (
             <button className="btn-secondary" onClick={handleClearFilters}>
               Clear
             </button>
@@ -264,7 +261,7 @@ export default function App() {
       <main>
         {tasks.length > 0 ? (
           viewMode === "grid" ? (
-            /* Standard Grid Layout */
+            /* Standard Grid View */
             <div className="tasks-grid">
               {tasks.map((task) => (
                 <TaskCard
@@ -273,41 +270,84 @@ export default function App() {
                   onToggleStatus={handleToggleStatus}
                   onEdit={handleOpenEdit}
                   onDelete={handleDeleteTask}
+                  viewMode={viewMode}
                 />
               ))}
             </div>
           ) : (
-            /* Kanban Board Column Layout */
+            /* Kanban Board View */
             <div className="kanban-board">
-              {["Pending", "In Progress", "Completed"].map((colStatus) => {
-                const columnTasks = getTasksByStatus(colStatus);
-                return (
-                  <div key={colStatus} className="kanban-column">
-                    <div className="kanban-column-header">
-                      <span className="kanban-column-title">{colStatus}</span>
-                      <span className="kanban-column-count">{columnTasks.length}</span>
-                    </div>
-                    <div className="kanban-tasks-list">
-                      {columnTasks.length > 0 ? (
-                        columnTasks.map((task) => (
-                          <TaskCard
-                            key={task._id}
-                            task={task}
-                            onToggleStatus={handleToggleStatus}
-                            onEdit={handleOpenEdit}
-                            onDelete={handleDeleteTask}
-                            onMoveStatus={handleMoveStatus}
-                          />
-                        ))
-                      ) : (
-                        <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem", textAlign: "center", padding: "30px 10px", border: "1px dashed var(--glass-border)", borderRadius: "8px", background: "rgba(255,255,255,0.01)" }}>
-                          No tasks in {colStatus}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {/* Column 1: Pending */}
+              <div className="kanban-column pending">
+                <div className="kanban-column-header">
+                  <span className="kanban-column-title">
+                    <circle style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#7dd3fc", marginRight: "6px" }}></circle>
+                    Pending
+                  </span>
+                  <span className="kanban-column-count">{getTasksByStatus("Pending").length}</span>
+                </div>
+                <div className="kanban-cards-list">
+                  {getTasksByStatus("Pending").map((task) => (
+                    <TaskCard
+                      key={task._id}
+                      task={task}
+                      onToggleStatus={handleToggleStatus}
+                      onEdit={handleOpenEdit}
+                      onDelete={handleDeleteTask}
+                      viewMode={viewMode}
+                      onShiftStatus={handleShiftStatus}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Column 2: In Progress */}
+              <div className="kanban-column in-progress">
+                <div className="kanban-column-header">
+                  <span className="kanban-column-title">
+                    <circle style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#c084fc", marginRight: "6px" }}></circle>
+                    In Progress
+                  </span>
+                  <span className="kanban-column-count">{getTasksByStatus("In Progress").length}</span>
+                </div>
+                <div className="kanban-cards-list">
+                  {getTasksByStatus("In Progress").map((task) => (
+                    <TaskCard
+                      key={task._id}
+                      task={task}
+                      onToggleStatus={handleToggleStatus}
+                      onEdit={handleOpenEdit}
+                      onDelete={handleDeleteTask}
+                      viewMode={viewMode}
+                      onShiftStatus={handleShiftStatus}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Column 3: Completed */}
+              <div className="kanban-column completed">
+                <div className="kanban-column-header">
+                  <span className="kanban-column-title">
+                    <circle style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#34d399", marginRight: "6px" }}></circle>
+                    Completed
+                  </span>
+                  <span className="kanban-column-count">{getTasksByStatus("Completed").length}</span>
+                </div>
+                <div className="kanban-cards-list">
+                  {getTasksByStatus("Completed").map((task) => (
+                    <TaskCard
+                      key={task._id}
+                      task={task}
+                      onToggleStatus={handleToggleStatus}
+                      onEdit={handleOpenEdit}
+                      onDelete={handleDeleteTask}
+                      viewMode={viewMode}
+                      onShiftStatus={handleShiftStatus}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )
         ) : (
