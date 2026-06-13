@@ -6,6 +6,8 @@ import TaskModal from "./components/TaskModal";
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [viewMode, setViewMode] = useState("grid"); // "grid" or "kanban"
+  
   const [filters, setFilters] = useState({
     search: "",
     status: "",
@@ -37,7 +39,7 @@ export default function App() {
     }
   };
 
-  // Fetch tasks on initial render and when filters (except search) change
+  // Fetch tasks on initial render and when filters (except search or when in Kanban mode) change
   useEffect(() => {
     fetchTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,6 +86,23 @@ export default function App() {
     }
   };
 
+  // Shift Status Directional (for Kanban board columns)
+  const handleMoveStatus = async (task, direction) => {
+    const statusOrder = ["Pending", "In Progress", "Completed"];
+    const currentIndex = statusOrder.indexOf(task.status);
+    const nextIndex = currentIndex + direction;
+    
+    if (nextIndex >= 0 && nextIndex < statusOrder.length) {
+      const nextStatus = statusOrder[nextIndex];
+      try {
+        await updateTask(task._id, { status: nextStatus });
+        fetchTasks();
+      } catch (err) {
+        console.error("Error shifting task column:", err);
+      }
+    }
+  };
+
   // Handle task deletion
   const handleDeleteTask = async (id) => {
     if (window.confirm("Are you sure you want to delete this task?")) {
@@ -118,6 +137,11 @@ export default function App() {
     });
   };
 
+  // Group tasks for Kanban columns
+  const getTasksByStatus = (statusName) => {
+    return tasks.filter((t) => t.status === statusName);
+  };
+
   return (
     <div className="dashboard-container">
       {/* Background Glow effects */}
@@ -132,13 +156,44 @@ export default function App() {
           <h1>TaskFlow</h1>
           <p>Manage your projects in a clean, glassmorphic workspace</p>
         </div>
-        <button className="btn-primary" onClick={handleOpenCreate}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Add Task
-        </button>
+        
+        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+          {/* View switcher toggle */}
+          <div className="view-switcher">
+            <button 
+              className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+              onClick={() => setViewMode("grid")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              Grid
+            </button>
+            <button 
+              className={`view-btn ${viewMode === "kanban" ? "active" : ""}`}
+              onClick={() => setViewMode("kanban")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="3" x2="12" y2="21"></line>
+                <line x1="3" y1="3" x2="3" y2="21"></line>
+                <line x1="21" y1="3" x2="21" y2="21"></line>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+              </svg>
+              Kanban
+            </button>
+          </div>
+
+          <button className="btn-primary" onClick={handleOpenCreate}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Task
+          </button>
+        </div>
       </header>
 
       {/* Statistics Analytics Dashboard */}
@@ -161,16 +216,19 @@ export default function App() {
         </div>
 
         <div className="filter-selects">
-          <select
-            className="glass-input glass-select"
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-          >
-            <option value="">All Statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-          </select>
+          {/* Hide Status dropdown filter when in Kanban board since columns sort them natively */}
+          {viewMode !== "kanban" && (
+            <select
+              className="glass-input glass-select"
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            >
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          )}
 
           <select
             className="glass-input glass-select"
@@ -194,7 +252,7 @@ export default function App() {
             <option value="dueDate:desc">Due Date (Desc)</option>
           </select>
 
-          {(filters.search || filters.status || filters.priority || filters.sortBy !== "createdAt:desc") && (
+          {(filters.search || (filters.status && viewMode !== "kanban") || filters.priority || filters.sortBy !== "createdAt:desc") && (
             <button className="btn-secondary" onClick={handleClearFilters}>
               Clear
             </button>
@@ -205,17 +263,53 @@ export default function App() {
       {/* Main Task Listing Section */}
       <main>
         {tasks.length > 0 ? (
-          <div className="tasks-grid">
-            {tasks.map((task) => (
-              <TaskCard
-                key={task._id}
-                task={task}
-                onToggleStatus={handleToggleStatus}
-                onEdit={handleOpenEdit}
-                onDelete={handleDeleteTask}
-              />
-            ))}
-          </div>
+          viewMode === "grid" ? (
+            /* Standard Grid Layout */
+            <div className="tasks-grid">
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task._id}
+                  task={task}
+                  onToggleStatus={handleToggleStatus}
+                  onEdit={handleOpenEdit}
+                  onDelete={handleDeleteTask}
+                />
+              ))}
+            </div>
+          ) : (
+            /* Kanban Board Column Layout */
+            <div className="kanban-board">
+              {["Pending", "In Progress", "Completed"].map((colStatus) => {
+                const columnTasks = getTasksByStatus(colStatus);
+                return (
+                  <div key={colStatus} className="kanban-column">
+                    <div className="kanban-column-header">
+                      <span className="kanban-column-title">{colStatus}</span>
+                      <span className="kanban-column-count">{columnTasks.length}</span>
+                    </div>
+                    <div className="kanban-tasks-list">
+                      {columnTasks.length > 0 ? (
+                        columnTasks.map((task) => (
+                          <TaskCard
+                            key={task._id}
+                            task={task}
+                            onToggleStatus={handleToggleStatus}
+                            onEdit={handleOpenEdit}
+                            onDelete={handleDeleteTask}
+                            onMoveStatus={handleMoveStatus}
+                          />
+                        ))
+                      ) : (
+                        <div style={{ color: "var(--color-text-muted)", fontSize: "0.85rem", textAlign: "center", padding: "30px 10px", border: "1px dashed var(--glass-border)", borderRadius: "8px", background: "rgba(255,255,255,0.01)" }}>
+                          No tasks in {colStatus}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         ) : (
           <div className="empty-state glass-panel">
             <div className="empty-state-icon">
