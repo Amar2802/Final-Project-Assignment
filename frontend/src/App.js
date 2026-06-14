@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import { getTasks, createTask, updateTask, deleteTask } from "./services/api";
 import StatsSection from "./components/StatsSection";
 import TaskCard from "./components/TaskCard";
@@ -29,7 +30,7 @@ export default function App() {
     }
   }, []);
 
-  // Fetch tasks from API (Runs only if user is logged in)
+  // Fetch tasks from API
   const fetchTasks = async () => {
     if (!user) return;
     try {
@@ -47,14 +48,13 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to fetch tasks:", err);
-      // Auto logout if session token expires/fails authentication middleware
       if (err.response?.status === 401) {
         handleLogout();
       }
     }
   };
 
-  // Fetch tasks when user logs in, changes filters, or toggles view mode
+  // Fetch tasks when filters or viewMode changes
   useEffect(() => {
     fetchTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,21 +309,23 @@ export default function App() {
       <main>
         {tasks.length > 0 ? (
           viewMode === "grid" ? (
-            /* Standard Grid View */
+            /* Standard Grid View with exit transitions */
             <div className="tasks-grid">
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task._id}
-                  task={task}
-                  onToggleStatus={handleToggleStatus}
-                  onEdit={handleOpenEdit}
-                  onDelete={handleDeleteTask}
-                  viewMode={viewMode}
-                />
-              ))}
+              <AnimatePresence mode="popLayout">
+                {tasks.map((task) => (
+                  <TaskCard
+                    key={task._id}
+                    task={task}
+                    onToggleStatus={handleToggleStatus}
+                    onEdit={handleOpenEdit}
+                    onDelete={handleDeleteTask}
+                    viewMode={viewMode}
+                  />
+                ))}
+              </AnimatePresence>
             </div>
           ) : (
-            /* Kanban Board View */
+            /* Kanban Board View with cross-column exit/entry layout animations */
             <div className="kanban-board">
               {/* Column 1: Pending */}
               <div className="kanban-column pending">
@@ -335,17 +337,19 @@ export default function App() {
                   <span className="kanban-column-count">{getTasksByStatus("Pending").length}</span>
                 </div>
                 <div className="kanban-cards-list">
-                  {getTasksByStatus("Pending").map((task) => (
-                    <TaskCard
-                      key={task._id}
-                      task={task}
-                      onToggleStatus={handleToggleStatus}
-                      onEdit={handleOpenEdit}
-                      onDelete={handleDeleteTask}
-                      viewMode={viewMode}
-                      onShiftStatus={handleShiftStatus}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout">
+                    {getTasksByStatus("Pending").map((task) => (
+                      <TaskCard
+                        key={task._id}
+                        task={task}
+                        onToggleStatus={handleToggleStatus}
+                        onEdit={handleOpenEdit}
+                        onDelete={handleDeleteTask}
+                        viewMode={viewMode}
+                        onShiftStatus={handleShiftStatus}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -359,17 +363,19 @@ export default function App() {
                   <span className="kanban-column-count">{getTasksByStatus("In Progress").length}</span>
                 </div>
                 <div className="kanban-cards-list">
-                  {getTasksByStatus("In Progress").map((task) => (
-                    <TaskCard
-                      key={task._id}
-                      task={task}
-                      onToggleStatus={handleToggleStatus}
-                      onEdit={handleOpenEdit}
-                      onDelete={handleDeleteTask}
-                      viewMode={viewMode}
-                      onShiftStatus={handleShiftStatus}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout">
+                    {getTasksByStatus("In Progress").map((task) => (
+                      <TaskCard
+                        key={task._id}
+                        task={task}
+                        onToggleStatus={handleToggleStatus}
+                        onEdit={handleOpenEdit}
+                        onDelete={handleDeleteTask}
+                        viewMode={viewMode}
+                        onShiftStatus={handleShiftStatus}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               </div>
 
@@ -383,17 +389,19 @@ export default function App() {
                   <span className="kanban-column-count">{getTasksByStatus("Completed").length}</span>
                 </div>
                 <div className="kanban-cards-list">
-                  {getTasksByStatus("Completed").map((task) => (
-                    <TaskCard
-                      key={task._id}
-                      task={task}
-                      onToggleStatus={handleToggleStatus}
-                      onEdit={handleOpenEdit}
-                      onDelete={handleDeleteTask}
-                      viewMode={viewMode}
-                      onShiftStatus={handleShiftStatus}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout">
+                    {getTasksByStatus("Completed").map((task) => (
+                      <TaskCard
+                        key={task._id}
+                        task={task}
+                        onToggleStatus={handleToggleStatus}
+                        onEdit={handleOpenEdit}
+                        onDelete={handleDeleteTask}
+                        viewMode={viewMode}
+                        onShiftStatus={handleShiftStatus}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               </div>
             </div>
@@ -412,13 +420,16 @@ export default function App() {
         )}
       </main>
 
-      {/* Add / Edit Task Modal Overlay */}
-      <TaskModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveTask}
-        taskToEdit={taskToEdit}
-      />
+      {/* Add / Edit Task Modal Overlay with AnimatePresence Mounting */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <TaskModal
+            onClose={() => setIsModalOpen(false)}
+            onSave={handleSaveTask}
+            taskToEdit={taskToEdit}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "framer-motion";
 
 export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewMode, onShiftStatus }) {
   const { title, description, status, priority, category, dueDate, subtasks, estimatedHours, actualHours } = task;
@@ -47,7 +48,16 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewM
   const isOverBudget = estimatedHours > 0 && actualHours > estimatedHours;
 
   return (
-    <div className={`task-card glass-panel status-${status.toLowerCase().replace(" ", "-")}`}>
+    <motion.div 
+      className={`task-card glass-panel status-${status.toLowerCase().replace(" ", "-")}`}
+      layout // Allows cards to slide smoothly to fill space on creation, deletion, or column shifts
+      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, y: -10 }}
+      whileHover={{ y: -5, scale: 1.015, borderColor: "rgba(255, 255, 255, 0.16)", boxShadow: "0 15px 35px rgba(0, 0, 0, 0.45)" }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ type: "spring", stiffness: 350, damping: 28 }}
+    >
       <div>
         {/* Header: Title & Priority */}
         <div className="task-card-header">
@@ -66,10 +76,12 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewM
         {totalSubtasks > 0 && (
           <div className="task-progress-container" title={`${completedSubtasks} of ${totalSubtasks} subtasks completed`}>
             <div className="task-progress-bar">
-              <div 
+              <motion.div 
                 className="task-progress-fill" 
-                style={{ width: `${progressPercent}%` }}
-              ></div>
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercent}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              ></motion.div>
             </div>
             <span className="task-progress-text">
               {completedSubtasks}/{totalSubtasks}
@@ -117,66 +129,70 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewM
 
       {/* Footer: Status Actions & Operations */}
       <div className="task-card-footer">
-        {/* Toggle status pill, hidden or read-only in Kanban to avoid clutter, but clickable */}
-        <button 
+        <motion.button 
           className="task-status-btn"
           onClick={() => onToggleStatus(task)}
           title="Toggle completion status"
+          whileTap={{ scale: 0.95 }}
         >
           <span className={`badge ${getStatusBadgeClass(status)}`}>
             {status}
           </span>
-        </button>
+        </motion.button>
 
         <div className="task-actions">
           {/* Kanban Shift controls */}
           {viewMode === "kanban" && (
             <div className="kanban-transfer-actions" style={{ marginRight: "8px" }}>
               {status !== "Pending" && (
-                <button
+                <motion.button
                   className="btn-icon"
                   onClick={() => onShiftStatus(task, "back")}
                   title="Move status back"
+                  whileTap={{ scale: 0.9 }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="19" y1="12" x2="5" y2="12"></line>
                     <polyline points="12 19 5 12 12 5"></polyline>
                   </svg>
-                </button>
+                </motion.button>
               )}
               {status !== "Completed" && (
-                <button
+                <motion.button
                   className="btn-icon"
                   style={{ borderColor: "rgba(168, 85, 247, 0.4)" }}
                   onClick={() => onShiftStatus(task, "forward")}
                   title="Move status forward"
+                  whileTap={{ scale: 0.9 }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                     <polyline points="12 5 19 12 12 19"></polyline>
                   </svg>
-                </button>
+                </motion.button>
               )}
             </div>
           )}
 
           {/* Edit Button */}
-          <button 
+          <motion.button 
             className="btn-icon" 
             onClick={() => onEdit(task)}
             title="Edit / View Details"
+            whileTap={{ scale: 0.9 }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9"></path>
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
             </svg>
-          </button>
+          </motion.button>
           
           {/* Delete Button */}
-          <button 
+          <motion.button 
             className="btn-icon delete" 
             onClick={() => onDelete(task._id)}
             title="Delete Task"
+            whileTap={{ scale: 0.9 }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -184,9 +200,9 @@ export default function TaskCard({ task, onToggleStatus, onEdit, onDelete, viewM
               <line x1="10" y1="11" x2="10" y2="17"></line>
               <line x1="14" y1="11" x2="14" y2="17"></line>
             </svg>
-          </button>
+          </motion.button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

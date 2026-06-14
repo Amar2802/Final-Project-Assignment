@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 
-export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
+export default function TaskModal({ onClose, onSave, taskToEdit }) {
   const [activeTab, setActiveTab] = useState("details");
   const [formData, setFormData] = useState({
     title: "",
@@ -47,9 +48,7 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
     }
     setError("");
     setActiveTab("details");
-  }, [taskToEdit, isOpen]);
-
-  if (!isOpen) return null;
+  }, [taskToEdit]);
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
@@ -104,11 +103,22 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
     : [];
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div 
+    <motion.div 
+      className="modal-overlay" 
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+    >
+      <motion.div 
         className="modal-content glass-panel" 
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth: "600px" }}
+        initial={{ scale: 0.9, y: 30, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.92, y: 20, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 380, damping: 26 }}
       >
         <div className="modal-header">
           <h2>{taskToEdit ? "Edit Task" : "Create Task"}</h2>
@@ -285,7 +295,14 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
             <div className="checklist-list">
               {formData.subtasks.length > 0 ? (
                 formData.subtasks.map((sub, index) => (
-                  <div key={index} className={`checklist-item ${sub.isCompleted ? "completed" : ""}`}>
+                  <motion.div 
+                    key={index} 
+                    className={`checklist-item ${sub.isCompleted ? "completed" : ""}`}
+                    layout
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                  >
                     <div className="checklist-item-left">
                       <input
                         type="checkbox"
@@ -307,7 +324,7 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                       </svg>
                     </button>
-                  </div>
+                  </motion.div>
                 ))
               ) : (
                 <div style={{ textAlign: "center", color: "var(--color-text-muted)", padding: "20px 0", fontSize: "0.9rem" }}>
@@ -346,7 +363,13 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
             {activityList.length > 0 ? (
               <div className="activity-timeline">
                 {activityList.map((act, i) => (
-                  <div key={i} className="activity-item">
+                  <motion.div 
+                    key={i} 
+                    className="activity-item"
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
                     <p className="activity-item-text">{act.text}</p>
                     <span className="activity-item-time">
                       {new Date(act.timestamp).toLocaleString(undefined, {
@@ -356,7 +379,7 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
                         minute: "2-digit"
                       })}
                     </span>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             ) : (
@@ -374,7 +397,7 @@ export default function TaskModal({ isOpen, onClose, onSave, taskToEdit }) {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
